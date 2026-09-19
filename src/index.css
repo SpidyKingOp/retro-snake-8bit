@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+@theme {
+  --font-retro: 'Press Start 2P', monospace;
+  --font-pixel: 'VT323', monospace;
+  --font-silk: 'Silkscreen', monospace;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #0c0d10;
+  color: #f3f4f6;
+  font-family: system-ui, -apple-system, sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+/* CRT Scanline Overlay */
+.scanlines {
+  background: linear-gradient(
+    rgba(18, 16, 16, 0) 50%, 
+    rgba(0, 0, 0, 0.28) 50%
+  ), linear-gradient(
+    90deg,
+    rgba(255, 0, 0, 0.02),
+    rgba(0, 255, 0, 0.01),
+    rgba(0, 0, 255, 0.02)
+  );
+  background-size: 100% 4px, 6px 100%;
+  pointer-events: none;
+}
+
+/* Subtle LCD Glare overlay */
+.lcd-glare {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.07) 0%,
+    rgba(255, 255, 255, 0.02) 28%,
+    transparent 35%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+/* Custom Scrollbar for sleek arcade UI */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #121318;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a2d39;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3e4254;
+}
+
+/* Tactile retro rectangular button animation */
+.retro-btn {
+  transition: all 0.05s ease-in-out;
+  box-shadow: 3px 3px 0 #000;
+  border-radius: 0 !important;
+}
+.retro-btn:active, .retro-btn.is-pressed {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 #000;
+}
+
+
