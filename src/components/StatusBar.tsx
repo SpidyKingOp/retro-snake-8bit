@@ -1,6 +1,6 @@
 import React from 'react'
 import type { BonusBug, GameMode, PaletteConfig } from '../types/game'
-import { Zap, Trophy, ShieldAlert, Sparkles } from 'lucide-react'
+import { Zap, Trophy, ShieldAlert } from 'lucide-react'
 
 interface StatusBarProps {
   score: number
@@ -18,7 +18,6 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   speedLevel,
   snakeLength,
   gameMode,
-  bonusBug,
   palette,
 }) => {
   const getModeLabel = (mode: GameMode) => {
@@ -32,80 +31,53 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   }
 
   return (
-    <div className="w-full max-w-[840px] mx-auto mb-2 select-none">
+    <div className="w-full max-w-[min(420px,calc(100dvh-235px))] sm:max-w-[840px] mx-auto mb-1.5 sm:mb-2 select-none shrink-0">
       {/* Top LCD Data Readouts: Sharp Borders */}
       <div 
-        className="px-4 py-2 border-x-4 border-t-4 flex flex-wrap items-center justify-between gap-3 text-xs sm:text-sm font-retro uppercase transition-all duration-300"
+        className="px-2.5 py-1.5 sm:px-4 sm:py-2 border-2 sm:border-4 flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-3 text-xs sm:text-sm font-retro uppercase transition-all duration-300"
         style={{
           backgroundColor: palette.screenBg,
           borderColor: palette.bezelBorder,
           color: palette.pixelOn,
         }}
       >
-        {/* Current Score */}
-        <div className="flex items-center gap-2">
-          <span className="opacity-75 text-[10px] sm:text-xs">SCORE</span>
-          <span className="font-bold text-sm sm:text-base tracking-wider">
-            {String(score).padStart(5, '0')}
-          </span>
+        {/* Row 1 on mobile: Score & High Score */}
+        <div className="flex items-center justify-between sm:justify-start gap-3 sm:gap-6">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <span className="opacity-75 text-[9px] sm:text-xs">SCORE</span>
+            <span className="font-bold text-xs sm:text-base tracking-wider">
+              {String(score).padStart(5, '0')}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <Trophy className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${score > highScore && highScore > 0 ? 'text-amber-400 animate-pulse' : 'opacity-80'}`} />
+            <span className="opacity-75 text-[9px] sm:text-xs">HI</span>
+            <span className={`font-bold text-xs sm:text-base tracking-wider ${score > highScore && highScore > 0 ? 'text-amber-400 font-extrabold' : ''}`}>
+              {String(Math.max(highScore, score)).padStart(5, '0')}
+            </span>
+          </div>
         </div>
 
-        {/* High Score */}
-        <div className="flex items-center gap-2">
-          <Trophy className="w-3.5 h-3.5 opacity-80" />
-          <span className="opacity-75 text-[10px] sm:text-xs">HI</span>
-          <span className="font-bold text-sm sm:text-base tracking-wider">
-            {String(highScore).padStart(5, '0')}
-          </span>
-        </div>
+        {/* Row 2 on mobile: Speed Level, Snake Length, Mode Badge */}
+        <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-4 border-t sm:border-t-0 border-current/25 pt-1 sm:pt-0">
+          <div className="flex items-center gap-1 sm:gap-1.5">
+            <Zap className="w-3 h-3 sm:w-3.5 sm:h-3.5 opacity-80" />
+            <span className="opacity-75 text-[9px] sm:text-xs">LVL</span>
+            <span className="font-bold text-[10px] sm:text-sm">{speedLevel}</span>
+          </div>
 
-        {/* Speed Level */}
-        <div className="flex items-center gap-1.5">
-          <Zap className="w-3.5 h-3.5 opacity-80" />
-          <span className="opacity-75 text-[10px] sm:text-xs">LVL</span>
-          <span className="font-bold">{speedLevel}</span>
-        </div>
+          <div className="flex items-center gap-1 sm:gap-1.5">
+            <span className="opacity-75 text-[9px] sm:text-xs">LEN</span>
+            <span className="font-bold text-[10px] sm:text-sm">{snakeLength}</span>
+          </div>
 
-        {/* Snake Length */}
-        <div className="flex items-center gap-1.5">
-          <span className="opacity-75 text-[10px] sm:text-xs">LEN</span>
-          <span className="font-bold">{snakeLength}</span>
-        </div>
-
-        {/* Mode Badge */}
-        <div className="flex items-center gap-1.5 px-2 py-0.5 border-2 border-current opacity-90 text-[10px]">
-          <ShieldAlert className="w-3 h-3" />
-          <span>{getModeLabel(gameMode)}</span>
+          <div className="flex items-center gap-1 px-1.5 py-0.5 border border-current opacity-90 text-[9px] sm:text-[10px]">
+            <ShieldAlert className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+            <span>{getModeLabel(gameMode)}</span>
+          </div>
         </div>
       </div>
-
-      {/* Bonus Bug Countdown Bar (when active): Sharp Progress Bar */}
-      {bonusBug && (
-        <div 
-          className="px-4 py-1.5 border-x-4 flex items-center justify-between text-[11px] font-retro transition-all duration-200 animate-pulse"
-          style={{
-            backgroundColor: palette.screenBg,
-            borderColor: palette.bezelBorder,
-            color: palette.pixelOn,
-          }}
-        >
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>BONUS BUG ACTIVE:</span>
-            <span className="font-bold">+{bonusBug.currentPoints} PTS</span>
-          </div>
-
-          <div className="w-28 sm:w-44 bg-black/25 h-2.5 border border-current">
-            <div 
-              className="h-full transition-all duration-100 ease-linear"
-              style={{
-                width: `${(bonusBug.remainingMs / bonusBug.durationMs) * 100}%`,
-                backgroundColor: palette.pixelOn,
-              }}
-            />
-          </div>
-        </div>
-      )}
     </div>
   )
 }

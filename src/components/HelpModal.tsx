@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { X, Keyboard, Bug, Trophy, Zap, Shield } from 'lucide-react'
 
 interface HelpModalProps {
@@ -7,11 +7,27 @@ interface HelpModalProps {
 }
 
 export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, onClose])
+
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 select-none animate-in fade-in duration-150">
-      <div className="relative w-full max-w-lg bg-neutral-900 border-4 border-neutral-600 shadow-[8px_8px_0px_#000] p-5 sm:p-6 overflow-y-auto max-h-[90vh]">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 select-none animate-in fade-in duration-150"
+      onClick={onClose}
+    >
+      <div 
+        className="relative w-full max-w-lg bg-neutral-900 border-4 border-neutral-600 shadow-[8px_8px_0px_#000] p-5 sm:p-6 overflow-y-auto max-h-[90vh] rounded-none"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b-2 border-neutral-700 pb-3 mb-4">
           <div className="flex items-center gap-2.5">
@@ -22,7 +38,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 border-2 border-neutral-700 bg-neutral-950 text-neutral-400 hover:text-white hover:border-neutral-500 shadow-[2px_2px_0px_#000] cursor-pointer"
+            className="p-1.5 border-2 border-neutral-700 bg-neutral-950 text-neutral-400 hover:text-white hover:border-neutral-500 shadow-[2px_2px_0px_#000] cursor-pointer rounded-none"
           >
             <X className="w-4 h-4" />
           </button>
@@ -42,7 +58,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
               <div><span className="text-white font-mono font-bold">Enter</span>: Restart Game</div>
               <div><span className="text-white font-mono font-bold">M</span>: Mute Audio</div>
               <div className="col-span-2 text-neutral-400 text-[10px] mt-1 border-t border-neutral-800 pt-1">
-                ★ Touchscreens: Use tactile sharp-edge rectangular D-Pad buttons below screen.
+                ★ Touchscreens: Swipe anywhere on screen / canvas to steer snake, or tap the D-Pad buttons below.
               </div>
             </div>
           </div>
@@ -67,7 +83,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
             <ul className="space-y-1.5 bg-neutral-950 p-3 border-2 border-neutral-800 shadow-[2px_2px_0px_#000] text-[11px]">
               <li><strong className="text-white">Classic Mode:</strong> Perimeter walls are solid. Colliding with borders or snake body ends the game.</li>
               <li><strong className="text-white">Pass-Through Mode:</strong> Snake warps smoothly through screen borders to the opposite edge.</li>
-              <li><strong className="text-white">Mazes (Boxes, Gates, Pinwheel):</strong> Solid retro obstacles inside the 28x18 grid. Precision navigation required.</li>
+              <li><strong className="text-white">Mazes (Boxes, Gates, Pinwheel):</strong> Solid retro obstacles inside the dot-matrix grid. Precision navigation required.</li>
             </ul>
           </div>
 
@@ -87,7 +103,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
         <div className="mt-5 pt-3 border-t-2 border-neutral-700 text-center">
           <button
             onClick={onClose}
-            className="w-full py-2.5 bg-neutral-800 hover:bg-neutral-700 border-2 border-neutral-600 text-neutral-100 font-retro text-xs shadow-[3px_3px_0px_#000] cursor-pointer"
+            className="w-full py-2.5 bg-neutral-800 hover:bg-neutral-700 border-2 border-neutral-600 text-neutral-100 font-retro text-xs shadow-[3px_3px_0px_#000] cursor-pointer rounded-none"
           >
             CLOSE & RETURN TO GAME
           </button>

@@ -1,24 +1,35 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import type { Direction, GameMode, GameState, Point, BonusBug } from '../types/game'
-import { GRID_WIDTH, GRID_HEIGHT, getMazeObstacles, isObstacle } from '../constants/mazes'
+import { getMazeObstacles, isObstacle } from '../constants/mazes'
 import { getSpeedConfig, DEFAULT_SPEED_LEVEL } from '../constants/speeds'
 import { soundManager } from '../utils/audio'
 import { getHighScore, saveHighScore } from '../utils/storage'
 
-const INITIAL_SNAKE: Point[] = [
-  { x: 8, y: 9 },
-  { x: 7, y: 9 },
-  { x: 6, y: 9 },
-  { x: 5, y: 9 },
-]
+const isMobileScreen = () => {
+  if (typeof window === 'undefined') return false
+  return window.innerWidth < 640
+}
 
-export function useSnakeGame() {
+const getInitialSnake = (width: number): Point[] => {
+  const startX = width === 18 ? 6 : 8
+  const startY = 9
+  return [
+    { x: startX, y: startY },
+    { x: startX - 1, y: startY },
+    { x: startX - 2, y: startY },
+    { x: startX - 3, y: startY },
+  ]
+}
+
+export function useSnakeGame({ isModalOpen = false }: { isModalOpen?: boolean } = {}) {
+  const [gridWidth, setGridWidth] = useState<number>(() => isMobileScreen() ? 18 : 28)
+  const [gridHeight] = useState<number>(18)
   const [gameState, setGameState] = useState<GameState>('IDLE')
   const [gameMode, setGameMode] = useState<GameMode>('classic')
   const [speedLevel, setSpeedLevel] = useState<number>(DEFAULT_SPEED_LEVEL)
-  const [snake, setSnake] = useState<Point[]>(INITIAL_SNAKE)
+  const [snake, setSnake] = useState<Point[]>(() => getInitialSnake(isMobileScreen() ? 18 : 28))
   const [direction, setDirection] = useState<Direction>('RIGHT')
-  const [food, setFood] = useState<Point>({ x: 18, y: 9 })
+  const [food, setFood] = useState<Point>(() => isMobileScreen() ? { x: 12, y: 9 } : { x: 18, y: 9 })
   const [bonusBug, setBonusBug] = useState<BonusBug | null>(null)
   const [score, setScore] = useState<number>(0)
   const [highScore, setHighScore] = useState<number>(() => getHighScore('classic'))
@@ -27,20 +38,27 @@ export function useSnakeGame() {
   const [isMuted, setIsMuted] = useState<boolean>(() => soundManager.getMuted())
 
   // References for fast tick access without closure staleness
+  const gridWidthRef = useRef<number>(gridWidth)
+  const gridHeightRef = useRef<number>(18)
   const directionRef = useRef<Direction>('RIGHT')
   const inputQueueRef = useRef<Direction[]>([])
-  const snakeRef = useRef<Point[]>(INITIAL_SNAKE)
+  const snakeRef = useRef<Point[]>(snake)
   const gameStateRef = useRef<GameState>('IDLE')
   const gameModeRef = useRef<GameMode>('classic')
   const speedLevelRef = useRef<number>(DEFAULT_SPEED_LEVEL)
-  const foodRef = useRef<Point>({ x: 18, y: 9 })
+  const foodRef = useRef<Point>(food)
   const bonusBugRef = useRef<BonusBug | null>(null)
   const scoreRef = useRef<number>(0)
   const foodCountRef = useRef<number>(0)
   const tickTimerRef = useRef<number | null>(null)
   const bugTimerRef = useRef<number | null>(null)
+  const gameOverSoundTimerRef = useRef<number | null>(null)
 
   // Keep refs synced with states
+  useEffect(() => {
+    gridWidthRef.current = gridWidth
+  }, [gridWidth])
+
   useEffect(() => {
     directionRef.current = direction
   }, [direction])
@@ -82,9 +100,13 @@ export function useSnakeGame() {
   const generateRandomPosition = useCallback((
     currentSnake: Point[], 
     currentMode: GameMode, 
-    extraObstacle?: Point | null
+    extraObstacle?: Point | null,
+    customGridWidth?: number,
+    customGridHeight?: number
   ): Point => {
-    const obstacles = getMazeObstacles(currentMode)
+    const width = customGridWidth ?? gridWidthRef.current
+    const height = customGridHeight ?? gridHeightRef.current
+    const obstacles = getMazeObstacles(currentMode, width, height)
     const occupied = new Set<string>()
 
     currentSnake.forEach(p => occupied.add(`${p.x},${p.y}`))
@@ -94,8 +116,8 @@ export function useSnakeGame() {
     }
 
     const available: Point[] = []
-    for (let x = 0; x < GRID_WIDTH; x++) {
-      for (let y = 0; y < GRID_HEIGHT; y++) {
+    for (let x = 0; x < width; x++) {
+      for (let y = 0; y < height; y++) {
         if (!occupied.has(`${x},${y}`)) {
           available.push({ x, y })
         }
@@ -141,9 +163,15 @@ export function useSnakeGame() {
       setIsNewHighScore(true)
     }
 
+    if (gameOverSoundTimerRef.current) {
+      clearTimeout(gameOverSoundTimerRef.current)
+      gameOverSoundTimerRef.current = null
+    }
+
     // Delay sad tune slightly after collision buzz
-    setTimeout(() => {
+    gameOverSoundTimerRef.current = window.setTimeout(() => {
       soundManager.playGameOver()
+      gameOverSoundTimerRef.current = null
     }, 280)
 
     if (tickTimerRef.current) {
@@ -187,15 +215,17 @@ export function useSnakeGame() {
     }
 
     const currentMode = gameModeRef.current
-    const obstacles = getMazeObstacles(currentMode)
+    const width = gridWidthRef.current
+    const height = gridHeightRef.current
+    const obstacles = getMazeObstacles(currentMode, width, height)
 
     // Check Wall Collisions
     if (currentMode === 'no-walls') {
-      newX = (newX + GRID_WIDTH) % GRID_WIDTH
-      newY = (newY + GRID_HEIGHT) % GRID_HEIGHT
+      newX = (newX + width) % width
+      newY = (newY + height) % height
     } else {
       // Solid outer walls in Classic & Maze modes
-      if (newX < 0 || newX >= GRID_WIDTH || newY < 0 || newY >= GRID_HEIGHT) {
+      if (newX < 0 || newX >= width || newY < 0 || newY >= height) {
         triggerGameOver()
         return
       }
@@ -351,7 +381,14 @@ export function useSnakeGame() {
 
   // Start / Restart Game
   const startGame = useCallback(() => {
-    const freshSnake = [...INITIAL_SNAKE]
+    if (gameOverSoundTimerRef.current) {
+      clearTimeout(gameOverSoundTimerRef.current)
+      gameOverSoundTimerRef.current = null
+    }
+
+    const width = gridWidthRef.current
+    const height = gridHeightRef.current
+    const freshSnake = getInitialSnake(width)
     setSnake(freshSnake)
     snakeRef.current = freshSnake
     setDirection('RIGHT')
@@ -365,7 +402,7 @@ export function useSnakeGame() {
     setBonusBug(null)
     bonusBugRef.current = null
 
-    const initialFood = generateRandomPosition(freshSnake, gameModeRef.current, null)
+    const initialFood = generateRandomPosition(freshSnake, gameModeRef.current, null, width, height)
     setFood(initialFood)
     foodRef.current = initialFood
 
@@ -397,10 +434,17 @@ export function useSnakeGame() {
 
   // Change Game Mode (resets game to IDLE)
   const selectGameMode = useCallback((mode: GameMode) => {
+    if (gameOverSoundTimerRef.current) {
+      clearTimeout(gameOverSoundTimerRef.current)
+      gameOverSoundTimerRef.current = null
+    }
+
     soundManager.playButtonClick()
     setGameMode(mode)
     setHighScore(getHighScore(mode))
-    const freshSnake = [...INITIAL_SNAKE]
+    const width = gridWidthRef.current
+    const height = gridHeightRef.current
+    const freshSnake = getInitialSnake(width)
     setSnake(freshSnake)
     snakeRef.current = freshSnake
     setDirection('RIGHT')
@@ -410,7 +454,7 @@ export function useSnakeGame() {
     scoreRef.current = 0
     setBonusBug(null)
     bonusBugRef.current = null
-    const newFood = generateRandomPosition(freshSnake, mode, null)
+    const newFood = generateRandomPosition(freshSnake, mode, null, width, height)
     setFood(newFood)
     foodRef.current = newFood
     setGameState('IDLE')
@@ -423,9 +467,30 @@ export function useSnakeGame() {
     setSpeedLevel(Math.max(1, Math.min(9, lvl)))
   }, [])
 
+  // Auto-pause if modal (Settings/Help) opens during active gameplay
+  useEffect(() => {
+    if (isModalOpen && gameStateRef.current === 'PLAYING') {
+      setGameState('PAUSED')
+      gameStateRef.current = 'PAUSED'
+    }
+  }, [isModalOpen])
+
+  // Clear timers on unmount
+  useEffect(() => {
+    return () => {
+      if (gameOverSoundTimerRef.current) {
+        clearTimeout(gameOverSoundTimerRef.current)
+        gameOverSoundTimerRef.current = null
+      }
+    }
+  }, [])
+
   // Global Keyboard Controls (always active in windowed and fullscreen mode)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Suppress gameplay keys while any modal dialog is open
+      if (isModalOpen) return
+
       // Prevent default page scrolling when steering or pausing
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
         e.preventDefault()
@@ -473,9 +538,42 @@ export function useSnakeGame() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [changeDirection, togglePause, startGame, toggleMute])
+  }, [changeDirection, togglePause, startGame, toggleMute, isModalOpen])
+
+  // Responsive grid dimension management for mobile (18x18 square) vs desktop (28x18 widescreen)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const mql = window.matchMedia('(max-width: 639px)')
+    const handleMediaChange = (e: MediaQueryListEvent | MediaQueryList) => {
+      const newWidth = e.matches ? 18 : 28
+      setGridWidth(prev => {
+        if (prev !== newWidth) {
+          gridWidthRef.current = newWidth
+          // If game is in IDLE state, adapt snake and food cleanly to the new bounds
+          if (gameStateRef.current === 'IDLE' || gameStateRef.current === 'GAME_OVER') {
+            const freshSnake = getInitialSnake(newWidth)
+            setSnake(freshSnake)
+            snakeRef.current = freshSnake
+            const newFood = generateRandomPosition(freshSnake, gameModeRef.current, null, newWidth, 18)
+            setFood(newFood)
+            foodRef.current = newFood
+          }
+          return newWidth
+        }
+        return prev
+      })
+    }
+
+    handleMediaChange(mql)
+    const listener = (e: MediaQueryListEvent) => handleMediaChange(e)
+    mql.addEventListener('change', listener)
+    return () => mql.removeEventListener('change', listener)
+  }, [generateRandomPosition])
 
   return {
+    gridWidth,
+    gridHeight,
     gameState,
     gameMode,
     speedLevel,

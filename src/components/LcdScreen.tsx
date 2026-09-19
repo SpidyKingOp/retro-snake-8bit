@@ -14,7 +14,10 @@ interface LcdScreenProps {
   highScore: number
   isNewHighScore: boolean
   speedLevel: number
+  gridWidth?: number
+  gridHeight?: number
   onStartOrRestart: () => void
+  onTogglePause?: () => void
   onDirection?: (direction: Direction) => void
 }
 
@@ -30,43 +33,68 @@ export const LcdScreen: React.FC<LcdScreenProps> = ({
   highScore,
   isNewHighScore,
   speedLevel,
+  gridWidth,
+  gridHeight,
   onStartOrRestart,
+  onTogglePause,
   onDirection,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [, setAnimTick] = useState<number>(0)
-  const touchStartRef = useRef<{ x: number; y: number } | null>(null)
+  const touchOriginRef = useRef<{ x: number; y: number } | null>(null)
+  const isSwipingRef = useRef<boolean>(false)
+
+  const gridW = gridWidth ?? GRID_WIDTH
+  const gridH = gridHeight ?? GRID_HEIGHT
+  const isSquare = gridW === gridH
 
   const handleTouchStart = (e: React.TouchEvent) => {
+    e.stopPropagation()
     if (e.touches.length > 0) {
-      touchStartRef.current = {
+      touchOriginRef.current = {
         x: e.touches[0].clientX,
         y: e.touches[0].clientY,
       }
+      isSwipingRef.current = false
     }
   }
 
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (!touchStartRef.current || e.changedTouches.length === 0) return
-    const endX = e.changedTouches[0].clientX
-    const endY = e.changedTouches[0].clientY
-    const dx = endX - touchStartRef.current.x
-    const dy = endY - touchStartRef.current.y
-    touchStartRef.current = null
+  const handleTouchMove = (e: React.TouchEvent) => {
+    e.stopPropagation()
+    if (!touchOriginRef.current || e.touches.length === 0) return
+    const curX = e.touches[0].clientX
+    const curY = e.touches[0].clientY
+    const dx = curX - touchOriginRef.current.x
+    const dy = curY - touchOriginRef.current.y
 
-    const minSwipe = 24
+    const minSwipe = 18
     if (Math.abs(dx) > minSwipe || Math.abs(dy) > minSwipe) {
+      isSwipingRef.current = true
       if (Math.abs(dx) > Math.abs(dy)) {
         onDirection?.(dx > 0 ? 'RIGHT' : 'LEFT')
       } else {
         onDirection?.(dy > 0 ? 'DOWN' : 'UP')
       }
-    } else {
-      if (gameState === 'IDLE' || gameState === 'GAME_OVER') {
-        onStartOrRestart()
-      }
+      touchOriginRef.current = { x: curX, y: curY }
     }
+  }
+
+  const handleScreenTap = () => {
+    if (gameState === 'IDLE' || gameState === 'GAME_OVER') {
+      onStartOrRestart()
+    } else if (gameState === 'PAUSED') {
+      onTogglePause?.()
+    }
+  }
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    e.stopPropagation()
+    if (!isSwipingRef.current) {
+      handleScreenTap()
+    }
+    touchOriginRef.current = null
+    isSwipingRef.current = false
   }
 
   // Periodic redraw trigger for blinking prompts & animated bug legs
@@ -85,14 +113,14 @@ export const LcdScreen: React.FC<LcdScreenProps> = ({
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    // Base logical dimensions for 28x18 grid
+    // Base logical dimensions for dynamic grid
     const dotSize = 24
     const gap = 3
     const cellSpan = dotSize + gap
     const padding = 14
 
-    const logicalWidth = padding * 2 + GRID_WIDTH * cellSpan - gap
-    const logicalHeight = padding * 2 + GRID_HEIGHT * cellSpan - gap
+    const logicalWidth = padding * 2 + gridW * cellSpan - gap
+    const logicalHeight = padding * 2 + gridH * cellSpan - gap
 
     // Support Retina/HiDPI displays
     const dpr = window.devicePixelRatio || 1
@@ -123,8 +151,8 @@ export const LcdScreen: React.FC<LcdScreenProps> = ({
     }
 
     // 2. Render Inactive Ghost Pixel Grid (authentic passive-matrix LCD look)
-    for (let x = 0; x < GRID_WIDTH; x++) {
-      for (let y = 0; y < GRID_HEIGHT; y++) {
+    for (let x = 0; x < gridW; x++) {
+      for (let y = 0; y < gridH; y++) {
         drawDot(x, y, palette.pixelOff)
       }
     }
@@ -132,8 +160,8 @@ export const LcdScreen: React.FC<LcdScreenProps> = ({
     // 2.5. Render Playable Game Area Perimeter Border
     const gridX = padding - 4
     const gridY = padding - 4
-    const gridW = GRID_WIDTH * cellSpan - gap + 8
-    const gridH = GRID_HEIGHT * cellSpan - gap + 8
+    const gridOuterW = gridW * cellSpan - gap + 8
+    const gridOuterH = gridH * cellSpan - gap + 8
 
     ctx.save()
     ctx.strokeStyle = palette.playableBorderColor
@@ -142,15 +170,15 @@ export const LcdScreen: React.FC<LcdScreenProps> = ({
       // In Pass-Through mode, draw a dashed boundary line indicating warp portals
       ctx.setLineDash([6, 6])
       ctx.globalAlpha = 0.5
-      ctx.strokeRect(gridX, gridY, gridW, gridH)
+      ctx.strokeRect(gridX, gridY, gridOuterW, gridOuterH)
     } else {
       // In Classic and Maze modes, draw a solid crisp lethal wall border
-      ctx.strokeRect(gridX, gridY, gridW, gridH)
+      ctx.strokeRect(gridX, gridY, gridOuterW, gridOuterH)
     }
     ctx.restore()
 
     // 3. Render Maze Obstacles (sharp industrial bricks)
-    const obstacles = getMazeObstacles(gameMode)
+    const obstacles = getMazeObstacles(gameMode, gridW, gridH)
     obstacles.forEach(ob => {
       const px = padding + ob.x * cellSpan
       const py = padding + ob.y * cellSpan
@@ -248,12 +276,18 @@ export const LcdScreen: React.FC<LcdScreenProps> = ({
             ctx.fillRect(ex, ey + 4, 2, 2)
             ctx.fillRect(ex + 4, ey + 4, 2, 2)
           }
-          if (direction === 'RIGHT' || direction === 'LEFT') {
-            drawX(px + 4, py + 3)
-            drawX(px + 4, py + dotSize - 9)
+          if (direction === 'RIGHT') {
+            drawX(px + dotSize - 9, py + 3)
+            drawX(px + dotSize - 9, py + dotSize - 9)
+          } else if (direction === 'LEFT') {
+            drawX(px + 3, py + 3)
+            drawX(px + 3, py + dotSize - 9)
+          } else if (direction === 'UP') {
+            drawX(px + 3, py + 3)
+            drawX(px + dotSize - 9, py + 3)
           } else {
-            drawX(px + 3, py + 4)
-            drawX(px + dotSize - 9, py + 4)
+            drawX(px + 3, py + dotSize - 9)
+            drawX(px + dotSize - 9, py + dotSize - 9)
           }
         } else {
           // Normal direction-facing eyes
@@ -327,7 +361,8 @@ export const LcdScreen: React.FC<LcdScreenProps> = ({
 
     if (gameState === 'IDLE') {
       ctx.save()
-      const { by } = drawRetroDialog(460, 240, 'RETRO SNAKE 8-BIT', true)
+      const boxW = isSquare ? 420 : 460
+      const { by } = drawRetroDialog(boxW, 240, 'RETRO SNAKE 8-BIT', true)
 
       ctx.fillStyle = palette.pixelOn
       ctx.textAlign = 'center'
@@ -338,21 +373,22 @@ export const LcdScreen: React.FC<LcdScreenProps> = ({
       ctx.fillText(`SPEED: LEVEL ${speedLevel}`, logicalWidth / 2, by + 102)
 
       // Divider line
-      ctx.fillRect(logicalWidth / 2 - 160, by + 125, 320, 2)
+      ctx.fillRect(logicalWidth / 2 - (boxW - 60) / 2, by + 125, boxW - 60, 2)
 
       // Blinking prompt
       const blink = Math.floor(Date.now() / 450) % 2 === 0
       if (blink) {
         ctx.font = 'bold 12px "Press Start 2P", monospace'
-        ctx.fillText('▶ PRESS SPACE TO START ◀', logicalWidth / 2, by + 160)
+        ctx.fillText('▶ PRESS SPACE / TAP TO START ◀', logicalWidth / 2, by + 160)
       }
 
-      ctx.font = '18px "VT323", monospace'
+      ctx.font = isSquare ? '16px "VT323", monospace' : '18px "VT323", monospace'
       ctx.fillText('OR TAP ANY D-PAD BUTTON TO PLAY', logicalWidth / 2, by + 195)
       ctx.restore()
     } else if (gameState === 'PAUSED') {
       ctx.save()
-      const { by } = drawRetroDialog(380, 180, 'GAME PAUSED', true)
+      const boxW = isSquare ? 360 : 380
+      const { by } = drawRetroDialog(boxW, 180, 'GAME PAUSED', true)
 
       ctx.fillStyle = palette.pixelOn
       ctx.textAlign = 'center'
@@ -364,22 +400,24 @@ export const LcdScreen: React.FC<LcdScreenProps> = ({
       const blink = Math.floor(Date.now() / 450) % 2 === 0
       if (blink) {
         ctx.font = 'bold 11px "Press Start 2P", monospace'
-        ctx.fillText('▶ PRESS SPACE TO RESUME ◀', logicalWidth / 2, by + 130)
+        ctx.fillText('▶ PRESS SPACE / TAP TO RESUME ◀', logicalWidth / 2, by + 130)
       }
       ctx.restore()
     } else if (gameState === 'GAME_OVER') {
       ctx.save()
-      const { by } = drawRetroDialog(480, 275, '*** GAME OVER ***', true)
+      const boxW = isSquare ? 430 : 480
+      const { by } = drawRetroDialog(boxW, 275, '*** GAME OVER ***', true)
 
       ctx.fillStyle = palette.pixelOn
       ctx.textAlign = 'left'
       ctx.textBaseline = 'middle'
 
-      const leftColX = logicalWidth / 2 - 180
-      const rightColX = logicalWidth / 2 + 180
+      const colOffset = isSquare ? 150 : 180
+      const leftColX = logicalWidth / 2 - colOffset
+      const rightColX = logicalWidth / 2 + colOffset
 
       // Stats Table with retro dotted leaders
-      ctx.font = '11px "Press Start 2P", monospace'
+      ctx.font = isSquare ? '10px "Press Start 2P", monospace' : '11px "Press Start 2P", monospace'
 
       // Final Score
       ctx.textAlign = 'left'
@@ -414,14 +452,14 @@ export const LcdScreen: React.FC<LcdScreenProps> = ({
 
       // Divider line
       ctx.fillStyle = palette.pixelOn
-      ctx.fillRect(logicalWidth / 2 - 190, by + 195, 380, 2)
+      ctx.fillRect(logicalWidth / 2 - (boxW - 50) / 2, by + 195, boxW - 50, 2)
 
       // Blinking Action Prompt
       const blink = Math.floor(Date.now() / 450) % 2 === 0
       ctx.textAlign = 'center'
       if (blink) {
         ctx.font = 'bold 12px "Press Start 2P", monospace'
-        ctx.fillText('▶ PRESS RESTART / SPACE ◀', logicalWidth / 2, by + 230)
+        ctx.fillText('▶ PRESS RESTART / TAP TO PLAY ◀', logicalWidth / 2, by + 230)
       }
       ctx.restore()
     }
@@ -437,12 +475,19 @@ export const LcdScreen: React.FC<LcdScreenProps> = ({
     highScore,
     isNewHighScore,
     speedLevel,
+    gridW,
+    gridH,
+    isSquare,
   ])
 
   return (
     <div
       ref={containerRef}
-      className="relative w-full aspect-[28/18] max-w-[840px] mx-auto overflow-hidden select-none border-4 transition-all duration-300 cursor-pointer"
+      className={`relative w-full ${
+        isSquare 
+          ? 'aspect-square max-w-[min(420px,calc(100dvh-235px))] max-h-[calc(100dvh-235px)]' 
+          : 'aspect-[28/18] max-w-[840px]'
+      } mx-auto overflow-hidden select-none border-4 transition-all duration-300 cursor-pointer touch-none shrink-0`}
       style={{
         borderColor: palette.bezelBorder,
         backgroundColor: palette.screenBg,
@@ -450,13 +495,11 @@ export const LcdScreen: React.FC<LcdScreenProps> = ({
           ? `0 0 25px ${palette.pixelOn}33` 
           : '0 8px 24px rgba(0,0,0,0.8)',
       }}
-      onClick={() => {
-        if (gameState === 'IDLE' || gameState === 'GAME_OVER') {
-          onStartOrRestart()
-        }
-      }}
+      onClick={handleScreenTap}
       onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
     >
       {/* HTML5 Canvas */}
       <canvas
